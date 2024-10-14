@@ -213,7 +213,7 @@ inference:
                                             <div>
                                                 <button
                                                     onClick={() => generateCRD(selectedModel)}
-                                                    className={styles.generateButton}
+                                                    className={`${styles.generateButton} ${styles.createCRDButton}`}
                                                 >
                                                     Customize workspace CRD
                                                 </button>
@@ -245,23 +245,21 @@ inference:
                                                             </div>
                                                             <div className={styles.statusTable}>
                                                                 <div className={styles.statusRow}>
-                                                                    <span className={styles.statusLabel}>Name:</span>
+                                                                    <span className={styles.statusLabel}>Name</span>
                                                                     <span className={styles.gray}>
                                                                         workspace-
                                                                         {selectedModel}
                                                                     </span>
                                                                 </div>
                                                                 <div className={styles.statusRow}>
-                                                                    <span className={styles.statusLabel}>
-                                                                        Instance:
-                                                                    </span>
+                                                                    <span className={styles.statusLabel}>Instance</span>
                                                                     <span className={styles.gray}>
                                                                         {details && details.minimumGpu}
                                                                     </span>
                                                                 </div>
                                                                 <div className={styles.statusRow}>
                                                                     <span className={styles.statusLabel}>
-                                                                        Resource Ready:
+                                                                        Resource Ready
                                                                     </span>
                                                                     <span className={styles.gray}>
                                                                         {state.resourceReady === null
@@ -273,7 +271,7 @@ inference:
                                                                 </div>
                                                                 <div className={styles.statusRow}>
                                                                     <span className={styles.statusLabel}>
-                                                                        Inference Ready:
+                                                                        Inference Ready
                                                                     </span>
                                                                     <span className={styles.gray}>
                                                                         {state.inferenceReady === null
@@ -285,7 +283,7 @@ inference:
                                                                 </div>
                                                                 <div className={styles.statusRow}>
                                                                     <span className={styles.statusLabel}>
-                                                                        Workspace Ready:
+                                                                        Workspace Ready
                                                                     </span>
                                                                     <span className={styles.gray}>
                                                                         {state.workspaceReady === null
@@ -296,7 +294,7 @@ inference:
                                                                     </span>
                                                                 </div>
                                                                 <div className={styles.statusRow}>
-                                                                    <span className={styles.statusLabel}>Age:</span>
+                                                                    <span className={styles.statusLabel}>Age</span>
                                                                     <span className={styles.gray}>{state.age}m</span>
                                                                 </div>
                                                             </div>

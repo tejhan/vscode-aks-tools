@@ -313,6 +313,7 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
                     workspaceReady: null,
                     age: 0,
                 });
+                this.cancelToken = true;
                 return;
             }
         }
