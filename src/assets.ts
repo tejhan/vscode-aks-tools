@@ -9,10 +9,6 @@ export function setAssetContext(context: ExtensionContext) {
     EXTENSION_CONTEXT = context;
 }
 
-export function getAssetContext(): ExtensionContext | null {
-    return EXTENSION_CONTEXT;
-}
-
 export function assetPath(relativePath: string): string {
     if (EXTENSION_CONTEXT) {
         // which it always should be
