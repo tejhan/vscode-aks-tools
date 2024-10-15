@@ -51,9 +51,7 @@ export const stateUpdater: WebviewStateUpdater<"kaito", EventDef, KaitoState> = 
 
 export const vscode = getWebviewMessageContext<"kaito">({
     installKaitoRequest: null,
-    getLLMModelsRequest: null,
-    generateWorkspaceRequest: null,
-    deployWorkspace: null,
+    redirectToKaitoModelsPanelRequest: null,
 });
 
 export const vscode2 = getWebviewMessageContext<"kaitoModels">({

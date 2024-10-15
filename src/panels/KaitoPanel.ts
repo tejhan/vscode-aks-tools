@@ -30,7 +30,6 @@ import {
 } from "../webview-contract/webviewDefinitions/kaito";
 import { TelemetryDefinition } from "../webview-contract/webviewTypes";
 import { BasePanel, PanelDataProvider } from "./BasePanel";
-// import { IActionContext } from "@microsoft/vscode-azext-utils";
 
 const MAX_RETRY = 3;
 let RETRY_COUNT = 0;
@@ -87,9 +86,7 @@ export class KaitoPanelDataProvider implements PanelDataProvider<"kaito"> {
     getTelemetryDefinition(): TelemetryDefinition<"kaito"> {
         return {
             installKaitoRequest: true,
-            getLLMModelsRequest: true,
-            generateWorkspaceRequest: true,
-            deployWorkspace: true,
+            redirectToKaitoModelsPanelRequest: true,
         };
     }
     getMessageHandler(webview: MessageSink<ToWebViewMsgDef>): MessageHandler<ToVsCodeMsgDef> {
@@ -97,50 +94,15 @@ export class KaitoPanelDataProvider implements PanelDataProvider<"kaito"> {
             installKaitoRequest: () => {
                 this.handleKaitoInstallation(webview);
             },
-            getLLMModelsRequest: () => {
-                this.handleLLMModelsRequest(webview);
-            },
-            generateWorkspaceRequest: () => {
-                // workspace: Workspace
-                this.handleGenerateWorkspaceRequest(webview);
-            },
-            deployWorkspace: () => {
-                this.handleDeployWorkspaceRequest(webview);
+            redirectToKaitoModelsPanelRequest: () => {
+                this.handleRedirectToKaitoModelsPanelRequest(webview);
             },
         };
     }
-    private async handleDeployWorkspaceRequest(webview: MessageSink<ToWebViewMsgDef>) {
-        // deploy workspace CRD
-        webview.postGetWorkspaceResponse({
-            workspace: {
-                workspace: "workspace CRD yaml",
-            },
-        });
-    }
 
-    private async handleGenerateWorkspaceRequest(webview: MessageSink<ToWebViewMsgDef>) {
-        // webview.postGetWorkspaceResponse({
-        //     workspace: {
-        //         workspace: "workspace CRD yaml",
-        //     },
-        // });
-        // This should just open the create crd panel...
+    private async handleRedirectToKaitoModelsPanelRequest(webview: MessageSink<ToWebViewMsgDef>) {
         vscode.commands.executeCommand("aks.aksKaitoCreateCRD", this.newtarget);
         void webview;
-    }
-    private async handleLLMModelsRequest(webview: MessageSink<ToWebViewMsgDef>) {
-        // get supported llm models from static config
-        webview.postGetLLMModelsResponse({
-            models: [
-                {
-                    family: "family",
-                    modelName: "modelName",
-                    minimumGpu: 1,
-                    kaitoVersion: "v1.0",
-                    modelSource: "modelSource",
-                },
-            ],
-        });
     }
 
     private async handleKaitoInstallation(webview: MessageSink<ToWebViewMsgDef>) {

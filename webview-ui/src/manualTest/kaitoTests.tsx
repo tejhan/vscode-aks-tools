@@ -47,14 +47,8 @@ export function getKaitoScenarios() {
                     });
                 }, 10000);
             },
-            getLLMModelsRequest: () => {
-                console.log("getLLMModelsRequest");
-            },
-            generateWorkspaceRequest: () => {
-                console.log("generateWorkspaceRequest");
-            },
-            deployWorkspace: () => {
-                console.log("deployWorkspace");
+            redirectToKaitoModelsPanelRequest: () => {
+                console.log("redirectToKaitoModelsPanelRequest");
             },
         };
     }

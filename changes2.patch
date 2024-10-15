@@ -1,0 +1,1099 @@
+diff --git a/package-lock.json b/package-lock.json
+index a37b85a..8580b14 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -16,7 +16,6 @@
+                 "@azure/arm-features": "^3.1.0",
+                 "@azure/arm-monitor": "^7.0.0",
+                 "@azure/arm-msi": "^2.1.0",
+-                "@azure/arm-msi": "^2.1.0",
+                 "@azure/arm-resources": "^5.2.0",
+                 "@azure/arm-resources-subscriptions": "^2.1.0",
+                 "@azure/arm-storage": "^18.3.0",
+@@ -37,7 +36,6 @@
+                 "rxjs": "^7.8.1",
+                 "semver": "^7.6.3",
+                 "sinon": "^19.0.2",
+-                "sinon": "^19.0.2",
+                 "tmp": "^0.2.3",
+                 "uuid": "^10.0.0",
+                 "vscode-kubernetes-tools-api": "^1.0.0"
+diff --git a/package.json b/package.json
+index 6f07130..af42826 100644
+--- a/package.json
++++ b/package.json
+@@ -316,6 +316,10 @@
+                 "command": "aks.aksKaitoCreateCRD",
+                 "title": "Create Kaito Workspace"
+             },
++            {
++                "command": "aks.aksKaitoManage",
++                "title": "Manage Kaito Models"
++            },
+             {
+                 "command": "aks.aksKaito",
+                 "title": "Install Kaito"
+@@ -442,6 +446,10 @@
+                 {
+                     "command": "aks.aksKaitoCreateCRD",
+                     "group": "navigation"
++                },
++                {
++                    "command": "aks.aksKaitoManage",
++                    "group": "navigation"
+                 }
+             ],
+             "aks.detectorsSubMenu": [
+diff --git a/src/commands/aksKaito/aksKaitoManage.ts b/src/commands/aksKaito/aksKaitoManage.ts
+new file mode 100644
+index 0000000..328565c
+--- /dev/null
++++ b/src/commands/aksKaito/aksKaitoManage.ts
+@@ -0,0 +1,85 @@
++import { IActionContext } from "@microsoft/vscode-azext-utils";
++import * as vscode from "vscode";
++import * as tmpfile from "../utils/tempfile";
++import * as k8s from "vscode-kubernetes-tools-api";
++import { getKubernetesClusterInfo } from "../utils/clusters";
++import { getReadySessionProvider } from "../../auth/azureAuth";
++import { KaitoManagePanelDataProvider } from "../../panels/KaitoManagePanel";
++import { KaitoManagePanel } from "../../panels/KaitoManagePanel";
++import { filterPodName, getAksClusterTreeNode } from "../utils/clusters";
++import { failed } from "../utils/errorable";
++import { getExtension, longRunning } from "../utils/host";
++
++export default async function aksKaitoManage(_context: IActionContext, target: unknown): Promise<void> {
++    const cloudExplorer = await k8s.extension.cloudExplorer.v1;
++    const clusterExplorer = await k8s.extension.clusterExplorer.v1;
++    const kubectl = await k8s.extension.kubectl.v1;
++
++    const sessionProvider = await getReadySessionProvider();
++    if (failed(sessionProvider)) {
++        vscode.window.showErrorMessage(sessionProvider.error);
++        return;
++    }
++
++    const clusterNode = getAksClusterTreeNode(target, cloudExplorer);
++    if (failed(clusterNode)) {
++        vscode.window.showErrorMessage(clusterNode.error);
++        return;
++    }
++
++    const extension = getExtension();
++    if (failed(extension)) {
++        vscode.window.showErrorMessage(extension.error);
++        return;
++    }
++
++    if (!kubectl.available) {
++        vscode.window.showWarningMessage(`Kubectl is unavailable.`);
++        return;
++    }
++
++    if (!cloudExplorer.available) {
++        vscode.window.showWarningMessage(`Cloud explorer is unavailable.`);
++        return;
++    }
++
++    if (!clusterExplorer.available) {
++        vscode.window.showWarningMessage(`Cluster explorer is unavailable.`);
++        return;
++    }
++
++    const clusterName = clusterNode.result.name;
++    const armId = clusterNode.result.armId;
++    const subscriptionId = clusterNode.result.subscriptionId;
++    const resourceGroupName = clusterNode.result.resourceGroupName;
++    const filterKaitoPodNames = await longRunning(`Checking if KAITO is installed.`, () => {
++        return filterPodName(sessionProvider.result, kubectl, subscriptionId, resourceGroupName, clusterName, "kaito-");
++    });
++
++    if (failed(filterKaitoPodNames)) {
++        vscode.window.showErrorMessage(filterKaitoPodNames.error);
++        return;
++    }
++
++    if (filterKaitoPodNames.result.length === 0) {
++        vscode.window.showInformationMessage(`Please install Kaito for cluster ${clusterName}.`);
++        return;
++    }
++    const clusterInfo = await getKubernetesClusterInfo(sessionProvider.result, target, cloudExplorer, clusterExplorer);
++    if (failed(clusterInfo)) {
++        vscode.window.showErrorMessage(clusterInfo.error);
++        return;
++    }
++    const kubeConfigFile = await tmpfile.createTempFile(clusterInfo.result.kubeconfigYaml, "yaml");
++
++    const panel = new KaitoManagePanel(extension.result.extensionUri);
++    const dataProvider = new KaitoManagePanelDataProvider(
++        clusterName,
++        subscriptionId,
++        resourceGroupName,
++        armId,
++        kubectl,
++        kubeConfigFile.filePath,
++    );
++    panel.show(dataProvider);
++}
+diff --git a/src/extension.ts b/src/extension.ts
+index 06233a7..6624382 100644
+--- a/src/extension.ts
++++ b/src/extension.ts
+@@ -22,6 +22,7 @@ import { aksInspektorGadgetShow } from "./commands/aksInspektorGadget/aksInspekt
+ import aksKaito from "./commands/aksKaito/aksKaito";
+ import aksKaitoGenerateYaml from "./commands/aksKaito/akskaitoGenerateYaml";
+ import aksKaitoCreateCRD from "./commands/aksKaito/aksKaitoCreateCRD";
++import aksKaitoManage from "./commands/aksKaito/aksKaitoManage";
+ import { aksRunKubectlCommands } from "./commands/aksKubectlCommands/aksKubectlCommands";
+ import aksNavToPortal from "./commands/aksNavToPortal/aksNavToPortal";
+ import aksReconcileCluster from "./commands/aksReconcileCluster/aksReconcileCluster";
+@@ -115,6 +116,7 @@ export async function activate(context: vscode.ExtensionContext) {
+         registerCommandWithTelemetry("aks.aksKaito", aksKaito);
+         registerCommandWithTelemetry("aks.aksKaitoGenerateYaml", aksKaitoGenerateYaml);
+         registerCommandWithTelemetry("aks.aksKaitoCreateCRD", aksKaitoCreateCRD);
++        registerCommandWithTelemetry("aks.aksKaitoManage", aksKaitoManage);
+         registerCommandWithTelemetry("aks.aksCreateClusterFromCopilot", aksCreateClusterFromCopilot);
+         registerCommandWithTelemetry("aks.aksDeployManifest", aksDeployManifest);
+         registerCommandWithTelemetry("aks.aksOpenKubectlPanel", aksOpenKubectlPanel);
+diff --git a/src/panels/KaitoManagePanel.ts b/src/panels/KaitoManagePanel.ts
+new file mode 100644
+index 0000000..e0ff969
+--- /dev/null
++++ b/src/panels/KaitoManagePanel.ts
+@@ -0,0 +1,74 @@
++import { BasePanel, PanelDataProvider } from "./BasePanel";
++import * as vscode from "vscode";
++import * as k8s from "vscode-kubernetes-tools-api";
++import { MessageHandler, MessageSink } from "../webview-contract/messaging";
++import { ToVsCodeMsgDef, ToWebViewMsgDef } from "../webview-contract/webviewDefinitions/kaitoManage";
++import { InitialState } from "../webview-contract/webviewDefinitions/kaitoManage";
++import { TelemetryDefinition } from "../webview-contract/webviewTypes";
++
++export class KaitoManagePanel extends BasePanel<"kaitoManage"> {
++    constructor(extensionUri: vscode.Uri) {
++        super(extensionUri, "kaitoManage", {
++            monitorUpdate: null,
++        });
++    }
++}
++
++export class KaitoManagePanelDataProvider implements PanelDataProvider<"kaitoManage"> {
++    public constructor(
++        readonly clusterName: string,
++        readonly subscriptionId: string,
++        readonly resourceGroupName: string,
++        readonly armId: string,
++        readonly kubectl: k8s.APIAvailable<k8s.KubectlV1>,
++        readonly kubeConfigFilePath: string,
++    ) {
++        this.clusterName = clusterName;
++        this.subscriptionId = subscriptionId;
++        this.resourceGroupName = resourceGroupName;
++        this.armId = armId;
++        this.kubectl = kubectl;
++        this.kubeConfigFilePath = kubeConfigFilePath;
++    }
++    getTitle(): string {
++        return `Manage Kaito Models`;
++    }
++    getInitialState(): InitialState {
++        return {
++            clusterName: this.clusterName,
++            models: [
++                {
++                    name: "example-model-1",
++                    instance: "Standard_NC12s_v3",
++                    resourceReady: null,
++                    inferenceReady: null,
++                    workspaceReady: null,
++                    age: 0,
++                },
++                {
++                    name: "example-model-2",
++                    instance: "Standard_NC12s_v3",
++                    resourceReady: true,
++                    inferenceReady: true,
++                    workspaceReady: true,
++                    age: 0,
++                },
++                {
++                    name: "example-model-3",
++                    instance: "Standard_NC12s_v3",
++                    resourceReady: false,
++                    inferenceReady: false,
++                    workspaceReady: false,
++                    age: 0,
++                },
++            ],
++        };
++    }
++    getTelemetryDefinition(): TelemetryDefinition<"kaitoManage"> {
++        return {};
++    }
++    getMessageHandler(webview: MessageSink<ToWebViewMsgDef>): MessageHandler<ToVsCodeMsgDef> {
++        void webview;
++        return {};
++    }
++}
+diff --git a/src/panels/KaitoModelsPanel.ts b/src/panels/KaitoModelsPanel.ts
+index 5386bfb..9900cbf 100644
+--- a/src/panels/KaitoModelsPanel.ts
++++ b/src/panels/KaitoModelsPanel.ts
+@@ -101,6 +101,7 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
+     nullIsFalse(value: boolean | null): boolean {
+         return value ?? false;
+     }
++
+     parseGPU(gpuRequirement: string): [string, number] {
+         const regex = /^Standard_NC(\d+)(ads_A100_v4|s_v3)$/;
+         const match = gpuRequirement.match(regex);
+@@ -188,6 +189,7 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
+             if (!quotaAvailable) {
+                 return;
+             }
++
+             const tempFilePath = join(tmpdir(), `kaito-deployment-${Date.now()}.yaml`);
+             writeFileSync(tempFilePath, yaml, "utf8");
+             const command = `apply -f ${tempFilePath}`;
+@@ -311,6 +313,7 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
+                     workspaceReady: null,
+                     age: 0,
+                 });
++                this.cancelToken = true;
+                 return;
+             }
+         }
+diff --git a/src/panels/KaitoPanel.ts b/src/panels/KaitoPanel.ts
+index df4ca76..43f0350 100644
+--- a/src/panels/KaitoPanel.ts
++++ b/src/panels/KaitoPanel.ts
+@@ -30,7 +30,6 @@ import {
+ } from "../webview-contract/webviewDefinitions/kaito";
+ import { TelemetryDefinition } from "../webview-contract/webviewTypes";
+ import { BasePanel, PanelDataProvider } from "./BasePanel";
+-// import { IActionContext } from "@microsoft/vscode-azext-utils";
+ 
+ const MAX_RETRY = 3;
+ let RETRY_COUNT = 0;
+@@ -87,9 +86,7 @@ export class KaitoPanelDataProvider implements PanelDataProvider<"kaito"> {
+     getTelemetryDefinition(): TelemetryDefinition<"kaito"> {
+         return {
+             installKaitoRequest: true,
+-            getLLMModelsRequest: true,
+-            generateWorkspaceRequest: true,
+-            deployWorkspace: true,
++            redirectToKaitoModelsPanelRequest: true,
+         };
+     }
+     getMessageHandler(webview: MessageSink<ToWebViewMsgDef>): MessageHandler<ToVsCodeMsgDef> {
+@@ -97,51 +94,16 @@ export class KaitoPanelDataProvider implements PanelDataProvider<"kaito"> {
+             installKaitoRequest: () => {
+                 this.handleKaitoInstallation(webview);
+             },
+-            getLLMModelsRequest: () => {
+-                this.handleLLMModelsRequest(webview);
+-            },
+-            generateWorkspaceRequest: () => {
+-                // workspace: Workspace
+-                this.handleGenerateWorkspaceRequest(webview);
+-            },
+-            deployWorkspace: () => {
+-                this.handleDeployWorkspaceRequest(webview);
++            redirectToKaitoModelsPanelRequest: () => {
++                this.handleRedirectToKaitoModelsPanelRequest(webview);
+             },
+         };
+     }
+-    private async handleDeployWorkspaceRequest(webview: MessageSink<ToWebViewMsgDef>) {
+-        // deploy workspace CRD
+-        webview.postGetWorkspaceResponse({
+-            workspace: {
+-                workspace: "workspace CRD yaml",
+-            },
+-        });
+-    }
+ 
+-    private async handleGenerateWorkspaceRequest(webview: MessageSink<ToWebViewMsgDef>) {
+-        // webview.postGetWorkspaceResponse({
+-        //     workspace: {
+-        //         workspace: "workspace CRD yaml",
+-        //     },
+-        // });
+-        // This should just open the create crd panel...
++    private async handleRedirectToKaitoModelsPanelRequest(webview: MessageSink<ToWebViewMsgDef>) {
+         vscode.commands.executeCommand("aks.aksKaitoCreateCRD", this.newtarget);
+         void webview;
+     }
+-    private async handleLLMModelsRequest(webview: MessageSink<ToWebViewMsgDef>) {
+-        // get supported llm models from static config
+-        webview.postGetLLMModelsResponse({
+-            models: [
+-                {
+-                    family: "family",
+-                    modelName: "modelName",
+-                    minimumGpu: 1,
+-                    kaitoVersion: "v1.0",
+-                    modelSource: "modelSource",
+-                },
+-            ],
+-        });
+-    }
+ 
+     private async handleKaitoInstallation(webview: MessageSink<ToWebViewMsgDef>) {
+         // Get the feature registration state
+diff --git a/src/webview-contract/webviewDefinitions/kaito.ts b/src/webview-contract/webviewDefinitions/kaito.ts
+index 21ec38f..830587a 100644
+--- a/src/webview-contract/webviewDefinitions/kaito.ts
++++ b/src/webview-contract/webviewDefinitions/kaito.ts
+@@ -17,9 +17,7 @@ export interface WorkspaceCRD {
+ 
+ export type ToVsCodeMsgDef = {
+     installKaitoRequest: void; // from webview when install kaito button is clicked
+-    getLLMModelsRequest: void; // from webview before llm model page loads
+-    generateWorkspaceRequest: void; // from webview when generate workspace button is clicked
+-    deployWorkspace: void; // from webview after deploy workspace button is clicked
++    redirectToKaitoModelsPanelRequest: void; // from webview when generate workspace button is clicked
+ };
+ 
+ export enum ProgressEventType {
+@@ -44,17 +42,6 @@ export type ToWebViewMsgDef = {
+         workspace: WorkspaceCRD;
+     }; // to webview after workspace CRD is generated
+ };
+-export type ToWebViewMsgDef2 = {
+-    deploymentProgressUpdate: {
+-        clusterName: string;
+-        modelName: string;
+-        workspaceExists: boolean;
+-        resourceReady: boolean | null;
+-        inferenceReady: boolean | null;
+-        workspaceReady: boolean | null;
+-        age: number;
+-    };
+-};
+ 
+ export type ModelDetails = {
+     family: string;
+diff --git a/src/webview-contract/webviewDefinitions/kaitoManage.ts b/src/webview-contract/webviewDefinitions/kaitoManage.ts
+new file mode 100644
+index 0000000..a9ef6ab
+--- /dev/null
++++ b/src/webview-contract/webviewDefinitions/kaitoManage.ts
+@@ -0,0 +1,26 @@
++import { WebviewDefinition } from "../webviewTypes";
++
++export interface InitialState {
++    clusterName: string;
++    models: ModelState[];
++}
++
++export type ModelState = {
++    name: string;
++    instance: string;
++    resourceReady: boolean | null;
++    inferenceReady: boolean | null;
++    workspaceReady: boolean | null;
++    age: number;
++};
++
++export type ToVsCodeMsgDef = {};
++
++export type ToWebViewMsgDef = {
++    monitorUpdate: {
++        clusterName: string;
++        models: ModelState[];
++    };
++};
++
++export type KaitoManageDefinition = WebviewDefinition<InitialState, ToVsCodeMsgDef, ToWebViewMsgDef>;
+diff --git a/src/webview-contract/webviewTypes.ts b/src/webview-contract/webviewTypes.ts
+index ca2759d..69f1183 100644
+--- a/src/webview-contract/webviewTypes.ts
++++ b/src/webview-contract/webviewTypes.ts
+@@ -10,6 +10,7 @@ import { DraftWorkflowDefinition } from "./webviewDefinitions/draft/draftWorkflo
+ import { InspektorGadgetDefinition } from "./webviewDefinitions/inspektorGadget";
+ import { KaitoDefinition } from "./webviewDefinitions/kaito";
+ import { KaitoModelsDefinition } from "./webviewDefinitions/kaitoModels";
++import { KaitoManageDefinition } from "./webviewDefinitions/kaitoManage";
+ import { KubectlDefinition } from "./webviewDefinitions/kubectl";
+ import { PeriscopeDefinition } from "./webviewDefinitions/periscope";
+ import { RetinaCaptureDefinition } from "./webviewDefinitions/retinaCapture";
+@@ -50,6 +51,7 @@ type AllWebviewDefinitions = {
+     retinaCapture: RetinaCaptureDefinition;
+     kaito: KaitoDefinition;
+     kaitoModels: KaitoModelsDefinition;
++    kaitoManage: KaitoManageDefinition;
+ };
+ 
+ type ContentIdLookup = {
+diff --git a/webview-ui/src/Kaito/Kaito.tsx b/webview-ui/src/Kaito/Kaito.tsx
+index 5362e44..c7eaccf 100644
+--- a/webview-ui/src/Kaito/Kaito.tsx
++++ b/webview-ui/src/Kaito/Kaito.tsx
+@@ -3,8 +3,6 @@ import { InitialState, ProgressEventType } from "../../../src/webview-contract/w
+ import { useStateManagement } from "../utilities/state";
+ import styles from "./Kaito.module.css";
+ import kaitoimage from "./kaitoimage.png";
+-
+-// import { KaitoModels } from "./KaitoModels";
+ import { stateUpdater, vscode } from "./state";
+ export function Kaito(initialState: InitialState) {
+     const { state } = useStateManagement(stateUpdater, initialState, vscode);
+@@ -13,14 +11,13 @@ export function Kaito(initialState: InitialState) {
+         vscode.postInstallKaitoRequest();
+     }
+ 
+-    function onClickGenerateWorkspace() {
+-        vscode.postGenerateWorkspaceRequest();
++    function onClickRedirectToKaitoModelsPanel() {
++        vscode.postRedirectToKaitoModelsPanelRequest();
+     }
+ 
+     return (
+         <>
+             <div className={styles.container}>
+-                {/* <div className={styles.kaitoPageHeader}>Kubernetes AI Toolchain Operator (KAITO)</div> */}
+                 <h2>Kubernetes AI Toolchain Operator (KAITO)</h2>
+                 <VSCodeDivider />
+                 <div className={styles.subHeader}>
+@@ -83,14 +80,18 @@ export function Kaito(initialState: InitialState) {
+                             </div>
+                         )}
+                     {state.kaitoInstallStatus === ProgressEventType.Success && state.models.length > 0 && (
+-                        // <KaitoFamilyModelInput modelDetails={state.models} />
+                         <div className={styles.postInstall}>
+                             <p>KAITO is installed!</p>
+-                            <p className={styles.thin}>You can now create a workspace by clicking the button below.</p>
++                            <p className={styles.thin}>
++                                You can now create a workspace & deploy models by clicking the button below.
++                            </p>
+                             <div>
+                                 {" "}
+-                                <VSCodeButton className={styles.generateButton} onClick={onClickGenerateWorkspace}>
+-                                    Generate Workspace
++                                <VSCodeButton
++                                    className={styles.generateButton}
++                                    onClick={onClickRedirectToKaitoModelsPanel}
++                                >
++                                    Deploy a model
+                                 </VSCodeButton>
+                             </div>
+                         </div>
+diff --git a/webview-ui/src/Kaito/KaitoModels.module.css b/webview-ui/src/Kaito/KaitoModels.module.css
+index 6ce689f..298c86c 100644
+--- a/webview-ui/src/Kaito/KaitoModels.module.css
++++ b/webview-ui/src/Kaito/KaitoModels.module.css
+@@ -127,7 +127,7 @@ body {
+     font-weight: 700;
+ }
+ .progressDiv {
+-    margin-bottom: 0rem;
++    margin-bottom: 0.7rem;
+     margin-top: 0.5rem;
+ }
+ .progress {
+@@ -186,6 +186,9 @@ body {
+         var(--vscode-list-activeSelectionBackground, var(--vscode-button-background, #0078d4))
+     );
+ }
++.createCRDButton {
++    background-color: rgba(128, 128, 128, 0.1);
++}
+ 
+ button:disabled {
+     color: #6a6d70;
+diff --git a/webview-ui/src/Kaito/KaitoModels.tsx b/webview-ui/src/Kaito/KaitoModels.tsx
+index 6dffaf4..57f263a 100644
+--- a/webview-ui/src/Kaito/KaitoModels.tsx
++++ b/webview-ui/src/Kaito/KaitoModels.tsx
+@@ -103,6 +103,7 @@ export function KaitoModels(initialState: InitialState) {
+     presetOptions:
+       image: <YOUR IMAGE URL>`;
+         }
++
+         if (name.substring(0, 5) === "phi-3") {
+             appname = "phi-3";
+             const match = name.match(/phi-3-(mini|medium)/);
+@@ -212,7 +213,7 @@ inference:
+                                             <div>
+                                                 <button
+                                                     onClick={() => generateCRD(selectedModel)}
+-                                                    className={styles.generateButton}
++                                                    className={`${styles.generateButton} ${styles.createCRDButton}`}
+                                                 >
+                                                     Customize workspace CRD
+                                                 </button>
+@@ -244,23 +245,21 @@ inference:
+                                                             </div>
+                                                             <div className={styles.statusTable}>
+                                                                 <div className={styles.statusRow}>
+-                                                                    <span className={styles.statusLabel}>Name:</span>
++                                                                    <span className={styles.statusLabel}>Name</span>
+                                                                     <span className={styles.gray}>
+                                                                         workspace-
+                                                                         {selectedModel}
+                                                                     </span>
+                                                                 </div>
+                                                                 <div className={styles.statusRow}>
+-                                                                    <span className={styles.statusLabel}>
+-                                                                        Instance:
+-                                                                    </span>
++                                                                    <span className={styles.statusLabel}>Instance</span>
+                                                                     <span className={styles.gray}>
+                                                                         {details && details.minimumGpu}
+                                                                     </span>
+                                                                 </div>
+                                                                 <div className={styles.statusRow}>
+                                                                     <span className={styles.statusLabel}>
+-                                                                        Resource Ready:
++                                                                        Resource Ready
+                                                                     </span>
+                                                                     <span className={styles.gray}>
+                                                                         {state.resourceReady === null
+@@ -272,7 +271,7 @@ inference:
+                                                                 </div>
+                                                                 <div className={styles.statusRow}>
+                                                                     <span className={styles.statusLabel}>
+-                                                                        Inference Ready:
++                                                                        Inference Ready
+                                                                     </span>
+                                                                     <span className={styles.gray}>
+                                                                         {state.inferenceReady === null
+@@ -284,7 +283,7 @@ inference:
+                                                                 </div>
+                                                                 <div className={styles.statusRow}>
+                                                                     <span className={styles.statusLabel}>
+-                                                                        Workspace Ready:
++                                                                        Workspace Ready
+                                                                     </span>
+                                                                     <span className={styles.gray}>
+                                                                         {state.workspaceReady === null
+@@ -295,7 +294,7 @@ inference:
+                                                                     </span>
+                                                                 </div>
+                                                                 <div className={styles.statusRow}>
+-                                                                    <span className={styles.statusLabel}>Age:</span>
++                                                                    <span className={styles.statusLabel}>Age</span>
+                                                                     <span className={styles.gray}>{state.age}m</span>
+                                                                 </div>
+                                                             </div>
+diff --git a/webview-ui/src/Kaito/state.ts b/webview-ui/src/Kaito/state.ts
+index 90c8edd..07abb07 100644
+--- a/webview-ui/src/Kaito/state.ts
++++ b/webview-ui/src/Kaito/state.ts
+@@ -51,9 +51,7 @@ export const stateUpdater: WebviewStateUpdater<"kaito", EventDef, KaitoState> =
+ 
+ export const vscode = getWebviewMessageContext<"kaito">({
+     installKaitoRequest: null,
+-    getLLMModelsRequest: null,
+-    generateWorkspaceRequest: null,
+-    deployWorkspace: null,
++    redirectToKaitoModelsPanelRequest: null,
+ });
+ 
+ export const vscode2 = getWebviewMessageContext<"kaitoModels">({
+diff --git a/webview-ui/src/KaitoManage/KaitoManage.module.css b/webview-ui/src/KaitoManage/KaitoManage.module.css
+new file mode 100644
+index 0000000..f05c7b6
+--- /dev/null
++++ b/webview-ui/src/KaitoManage/KaitoManage.module.css
+@@ -0,0 +1,161 @@
++.title {
++    font-weight: bold;
++}
++
++.mainTitle {
++    /* font-size: 1.625rem; */
++    /* font-weight: 600; */
++    /* margin: 0.rem 0 0 0; */
++}
++
++.gridContainer {
++    display: grid;
++    grid-template-columns: repeat(auto-fill, minmax(25rem, 1fr));
++    padding: 0% 10% 0% 0.5%;
++    gap: 1rem;
++    margin-top: 1.3rem;
++}
++
++.gridItem {
++    padding: 0.9rem 1.2rem 1.2rem 1.2rem;
++    border-radius: 0.3125rem;
++    text-align: left;
++    color: var(--vscode-editor-foreground, #fff);
++    background-color: rgba(54, 52, 52, 0.3);
++    border-radius: 0.25rem;
++    border: none;
++    box-sizing: border-box;
++    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
++}
++
++.modelName {
++    margin: 0 0 0 0;
++    font-weight: 700;
++    font-size: 0.9rem;
++}
++
++.blurb {
++    font-size: 0.7rem;
++    margin: 0.4rem 0rem 0.4rem 0rem;
++    opacity: 0.75;
++}
++
++.buttonDiv {
++    margin: 0 0 0.3rem 0;
++}
++
++.statusTable {
++    font-size: 0.7rem;
++    display: table;
++    width: 100%;
++    margin-top: 0.4375rem;
++    border-spacing: 0 0.25rem;
++}
++
++.statusRow {
++    display: table-row;
++    margin-bottom: 1rem;
++}
++
++.statusLabel,
++.statusValue {
++    display: table-cell;
++    padding: 0 0 0 0;
++    vertical-align: top;
++    text-align: left;
++}
++
++.statusLabel {
++    font-weight: 500;
++    padding-right: 1rem;
++    width: 30%;
++    min-width: 6rem;
++}
++
++.statusValue {
++    color: var(--vscode-editor-foreground, #fff);
++    opacity: 0.75;
++    width: auto;
++}
++
++.gray {
++    opacity: 0.75;
++}
++
++.button {
++    color: var(--button-foreground, #fff);
++    border-radius: 0.125rem;
++    background-color: rgba(128, 128, 128, 0.1);
++    border: none;
++    border-radius: 0.3125rem;
++    outline: none;
++    margin-top: 0.25rem;
++    font-size: 0.625rem;
++    font-weight: 400;
++    transition: all 0.1s ease;
++    padding: 0.3rem 0.5rem 0.3rem 0.5rem;
++    font-family: var(--vscode-font-family);
++    border-radius: 0.17rem;
++    margin-bottom: 0.4rem;
++}
++
++.button:hover {
++    cursor: pointer;
++    background: var(
++        --vscode-selection-background,
++        var(--vscode-list-activeSelectionBackground, var(--vscode-button-background, #0078d4))
++    );
++}
++
++.bold {
++    color: var(--vscode-editor-foreground, #fff);
++    font-weight: 700;
++}
++.progressDiv {
++    margin-bottom: 0.7rem;
++    margin-top: 0.2rem;
++    font-size: 0.7rem;
++}
++.progress {
++    width: 0.7rem;
++    height: 0.7rem;
++    display: inline-block;
++    position: relative;
++    top: 0.125rem;
++    margin-right: 0.5rem;
++}
++
++.successIconContainer {
++    display: inline-block;
++    height: 100%;
++    /* height: 100%; */
++}
++.successIcon {
++    color: #89d185;
++    font-size: 0.8rem !important;
++    margin-right: 0.3rem;
++    position: relative;
++    top: 0.15rem;
++}
++
++.errorIcon {
++    color: #f14c4c;
++    font-size: 0.8rem !important;
++    margin-right: 0.3rem;
++    position: relative;
++    top: 0.15rem;
++}
++
++.successMessage {
++    color: var(--vscode-editor-foreground, #fff);
++    font-weight: 600;
++    line-height: 0rem;
++}
++
++.successContainer {
++    position: relative;
++}
++
++.testButton {
++    margin-right: 0.58rem;
++}
+diff --git a/webview-ui/src/KaitoManage/KaitoManage.tsx b/webview-ui/src/KaitoManage/KaitoManage.tsx
+new file mode 100644
+index 0000000..c6d4b81
+--- /dev/null
++++ b/webview-ui/src/KaitoManage/KaitoManage.tsx
+@@ -0,0 +1,162 @@
++import { useStateManagement } from "../utilities/state";
++import styles from "./KaitoManage.module.css";
++import { stateUpdater, vscode } from "./state";
++import { InitialState } from "../../../src/webview-contract/webviewDefinitions/kaitoManage";
++import { VSCodeDivider, VSCodeProgressRing } from "@vscode/webview-ui-toolkit/react";
++
++export function KaitoManage(initialState: InitialState) {
++    const { state } = useStateManagement(stateUpdater, initialState, vscode);
++    const models = [
++        {
++            name: "Model 1",
++            instance: "Standard_NC12s_v3",
++            resourceReady: true,
++            inferenceReady: true,
++            workspaceReady: true,
++            age: 0,
++        },
++        {
++            name: "Model 2",
++            instance: "Standard_NC12s_v3",
++            resourceReady: true,
++            inferenceReady: true,
++            workspaceReady: true,
++            age: 0,
++        },
++        {
++            name: "Model 3",
++            instance: "Standard_NC12s_v3",
++            resourceReady: true,
++            inferenceReady: true,
++            workspaceReady: true,
++            age: 0,
++        },
++        {
++            name: "Model 4",
++            instance: "Standard_NC12s_v3",
++            resourceReady: true,
++            inferenceReady: true,
++            workspaceReady: true,
++            age: 0,
++        },
++    ];
++    void models;
++    return (
++        <>
++            <h2 className={styles.mainTitle}>Manage Kaito Deployments</h2>
++            <VSCodeDivider />
++            <p>Review models that you have generated custom resource documents and deployment status.</p>
++
++            <div className={styles.gridContainer}>
++                {state.models.map((model, index) => (
++                    <div key={index} className={styles.gridItem}>
++                        <p className={styles.modelName}>{model.name}</p>
++                        <p className={styles.blurb}>
++                            If this is your preferred model for deployment in your application, please proceed to
++                            generate the custom resource document and initiate the deployment process.
++                        </p>
++                        <div className={styles.progressDiv}>
++                            {!(model.workspaceReady ?? false) &&
++                                (() => {
++                                    if (model.age < 200) {
++                                        return (
++                                            <>
++                                                <div className={styles.buttonDiv}>
++                                                    <button className={styles.button}>Cancel</button>
++                                                </div>
++                                                <VSCodeProgressRing className={styles.progress} />
++                                                <span className={styles.bold}>Deployment in progress</span>
++                                            </>
++                                        );
++                                    }
++                                    return (
++                                        <>
++                                            <div className={styles.buttonDiv}>
++                                                <button className={`${styles.button} ${styles.testButton}`}>
++                                                    Re-deploy default CRD
++                                                </button>
++                                                <button className={styles.button}>Delete Workspace</button>
++                                            </div>
++                                            <div className={styles.sucessContainer}>
++                                                <div className={styles.successIconContainer}>
++                                                    <i className={`codicon codicon-error ${styles.errorIcon}`}></i>
++                                                </div>
++                                                <span className={styles.successMessage}>Failed Deployment</span>
++                                            </div>
++                                        </>
++                                    );
++                                })()}
++                            {(model.workspaceReady ?? false) &&
++                                (() => {
++                                    return (
++                                        <>
++                                            <div className={styles.sucessContainer}>
++                                                <div className={styles.buttonDiv}>
++                                                    <button className={`${styles.button} ${styles.testButton}`}>
++                                                        Test
++                                                    </button>
++                                                    <button className={styles.button}>Delete Workspace</button>
++                                                </div>
++                                                <div className={styles.successIconContainer}>
++                                                    <i className={`codicon codicon-pass ${styles.successIcon}`}></i>
++                                                </div>
++                                                <span className={styles.successMessage}>Deployment successful</span>
++                                            </div>
++                                        </>
++                                    );
++                                })()}
++                        </div>
++                        <div className={styles.statusTable}>
++                            <div className={styles.statusRow}>
++                                <span className={styles.statusLabel}>Name</span>
++                                <span className={styles.gray}>
++                                    workspace-
++                                    {model.name}
++                                </span>
++                            </div>
++                            <div className={styles.statusRow}>
++                                <span className={styles.statusLabel}>Instance</span>
++                                <span className={styles.gray}>{model.instance}</span>
++                            </div>
++                            <div className={styles.statusRow}>
++                                <span className={styles.statusLabel}>Resource Ready</span>
++                                <span className={styles.gray}>
++                                    {model.resourceReady === null
++                                        ? "In-progress"
++                                        : model.resourceReady
++                                          ? "True"
++                                          : "False"}
++                                </span>
++                            </div>
++                            <div className={styles.statusRow}>
++                                <span className={styles.statusLabel}>Inference Ready</span>
++                                <span className={styles.gray}>
++                                    {model.inferenceReady === null
++                                        ? "In-progress"
++                                        : model.inferenceReady
++                                          ? "True"
++                                          : "False"}
++                                </span>
++                            </div>
++                            <div className={styles.statusRow}>
++                                <span className={styles.statusLabel}>Workspace Ready</span>
++                                <span className={styles.gray}>
++                                    {model.workspaceReady === null
++                                        ? "In-progress"
++                                        : model.workspaceReady
++                                          ? "True"
++                                          : "False"}
++                                </span>
++                            </div>
++                            <div className={styles.statusRow}>
++                                <span className={styles.statusLabel}>Age</span>
++                                <span className={styles.gray}>{model.age}m</span>
++                            </div>
++                        </div>
++                    </div>
++                ))}
++            </div>
++            {void state}
++        </>
++    );
++}
+diff --git a/webview-ui/src/KaitoManage/state.ts b/webview-ui/src/KaitoManage/state.ts
+new file mode 100644
+index 0000000..e92d640
+--- /dev/null
++++ b/webview-ui/src/KaitoManage/state.ts
+@@ -0,0 +1,24 @@
++import { WebviewStateUpdater } from "../utilities/state";
++import { getWebviewMessageContext } from "../utilities/vscode";
++import { ModelState } from "../../../src/webview-contract/webviewDefinitions/kaitoManage";
++
++export type EventDef = Record<string, never>;
++
++export type MonitorState = {
++    clusterName: string;
++    models: ModelState[];
++};
++
++export const vscode = getWebviewMessageContext<"kaitoManage">({});
++
++export const stateUpdater: WebviewStateUpdater<"kaitoManage", EventDef, MonitorState> = {
++    createState: (initialState) => ({
++        ...initialState,
++    }),
++    vscodeMessageHandler: {
++        monitorUpdate: (state) => ({
++            ...state,
++        }),
++    },
++    eventHandler: {},
++};
+diff --git a/webview-ui/src/main.tsx b/webview-ui/src/main.tsx
+index 9d3f1f8..3536f50 100644
+--- a/webview-ui/src/main.tsx
++++ b/webview-ui/src/main.tsx
+@@ -12,6 +12,7 @@ import { DraftDeployment, DraftDockerfile, DraftWorkflow } from "./Draft";
+ import { InspektorGadget } from "./InspektorGadget/InspektorGadget";
+ import { Kaito } from "./Kaito/Kaito";
+ import { KaitoModels } from "./Kaito/KaitoModels";
++import { KaitoManage } from "./KaitoManage/KaitoManage";
+ import { Kubectl } from "./Kubectl/Kubectl";
+ import "./main.css";
+ import { Periscope } from "./Periscope/Periscope";
+@@ -63,6 +64,7 @@ function getVsCodeContent(): JSX.Element {
+         retinaCapture: () => <RetinaCapture {...getInitialState()} />,
+         kaito: () => <Kaito {...getInitialState()} />,
+         kaitoModels: () => <KaitoModels {...getInitialState()} />,
++        kaitoManage: () => <KaitoManage {...getInitialState()} />,
+     };
+ 
+     return rendererLookup[vscodeContentId]();
+diff --git a/webview-ui/src/manualTest/kaitoManageTests.tsx b/webview-ui/src/manualTest/kaitoManageTests.tsx
+new file mode 100644
+index 0000000..2e06090
+--- /dev/null
++++ b/webview-ui/src/manualTest/kaitoManageTests.tsx
+@@ -0,0 +1,52 @@
++import { MessageHandler, MessageSink } from "../../../src/webview-contract/messaging";
++import { ToVsCodeMsgDef, ToWebViewMsgDef } from "../../../src/webview-contract/webviewDefinitions/kaitoManage";
++import { KaitoManage } from "../KaitoManage/KaitoManage";
++import { stateUpdater } from "../KaitoManage/state";
++import { Scenario } from "../utilities/manualTest";
++import { InitialState } from "../../../src/webview-contract/webviewDefinitions/kaitoManage";
++
++export function getKaitoManageScenarios() {
++    const initialState: InitialState = {
++        clusterName: "Kaito cluster",
++        models: [
++            {
++                name: "example-model-1",
++                instance: "Standard_NC12s_v3",
++                resourceReady: null,
++                inferenceReady: null,
++                workspaceReady: null,
++                age: 0,
++            },
++            {
++                name: "example-model-2",
++                instance: "Standard_NC12s_v3",
++                resourceReady: true,
++                inferenceReady: true,
++                workspaceReady: true,
++                age: 0,
++            },
++            {
++                name: "example-model-3",
++                instance: "Standard_NC12s_v3",
++                resourceReady: false,
++                inferenceReady: false,
++                workspaceReady: false,
++                age: 300,
++            },
++        ],
++    };
++    function getMessageHandler(webview: MessageSink<ToWebViewMsgDef>): MessageHandler<ToVsCodeMsgDef> {
++        void webview;
++        return {};
++    }
++
++    return [
++        Scenario.create(
++            "kaitoManage",
++            "Manage",
++            () => <KaitoManage {...initialState} />,
++            getMessageHandler,
++            stateUpdater.vscodeMessageHandler,
++        ),
++    ];
++}
+diff --git a/webview-ui/src/manualTest/kaitoModelTests.tsx b/webview-ui/src/manualTest/kaitoModelTests.tsx
+index d211d45..d808062 100644
+--- a/webview-ui/src/manualTest/kaitoModelTests.tsx
++++ b/webview-ui/src/manualTest/kaitoModelTests.tsx
+@@ -25,14 +25,8 @@ export function getKaitoModelScenarios() {
+                     models: [],
+                 });
+             },
+-            getLLMModelsRequest: () => {
+-                console.log("getLLMModelsRequest");
+-            },
+-            generateWorkspaceRequest: () => {
+-                console.log("generateWorkspaceRequest");
+-            },
+-            deployWorkspace: () => {
+-                console.log("deployWorkspace");
++            redirectToKaitoModelsPanelRequest: () => {
++                console.log("redirectToKaitoModelsPanelRequest");
+             },
+         };
+     }
+diff --git a/webview-ui/src/manualTest/kaitoTests.tsx b/webview-ui/src/manualTest/kaitoTests.tsx
+index c9c5405..bb8d27a 100644
+--- a/webview-ui/src/manualTest/kaitoTests.tsx
++++ b/webview-ui/src/manualTest/kaitoTests.tsx
+@@ -47,14 +47,8 @@ export function getKaitoScenarios() {
+                     });
+                 }, 10000);
+             },
+-            getLLMModelsRequest: () => {
+-                console.log("getLLMModelsRequest");
+-            },
+-            generateWorkspaceRequest: () => {
+-                console.log("generateWorkspaceRequest");
+-            },
+-            deployWorkspace: () => {
+-                console.log("deployWorkspace");
++            redirectToKaitoModelsPanelRequest: () => {
++                console.log("redirectToKaitoModelsPanelRequest");
+             },
+         };
+     }
+diff --git a/webview-ui/src/manualTest/main.tsx b/webview-ui/src/manualTest/main.tsx
+index 367eb57..0c56655 100644
+--- a/webview-ui/src/manualTest/main.tsx
++++ b/webview-ui/src/manualTest/main.tsx
+@@ -13,6 +13,7 @@ import { getDraftDeploymentScenarios, getDraftDockerfileScenarios, getDraftWorkf
+ import { getInspektorGadgetScenarios } from "./inspektorGadgetTests";
+ import { getKaitoScenarios } from "./kaitoTests";
+ import { getKaitoModelScenarios } from "./kaitoModelTests";
++import { getKaitoManageScenarios } from "./kaitoManageTests";
+ import { getKubectlScenarios } from "./kubectlTests";
+ import { getPeriscopeScenarios } from "./periscopeTests";
+ import { getRetinaCaptureScenarios } from "./retinaCaptureTests";
+@@ -51,6 +52,7 @@ const contentTestScenarios: Record<ContentId, Scenario[]> = {
+     retinaCapture: getRetinaCaptureScenarios(),
+     kaito: getKaitoScenarios(),
+     kaitoModels: getKaitoModelScenarios(),
++    kaitoManage: getKaitoManageScenarios(),
+ };
+ 
+ const testScenarios = Object.values(contentTestScenarios).flatMap((s) => s);
