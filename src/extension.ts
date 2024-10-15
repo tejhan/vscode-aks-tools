@@ -22,6 +22,7 @@ import { aksInspektorGadgetShow } from "./commands/aksInspektorGadget/aksInspekt
 import aksKaito from "./commands/aksKaito/aksKaito";
 import aksKaitoGenerateYaml from "./commands/aksKaito/akskaitoGenerateYaml";
 import aksKaitoCreateCRD from "./commands/aksKaito/aksKaitoCreateCRD";
+import aksKaitoManage from "./commands/aksKaito/aksKaitoManage";
 import { aksRunKubectlCommands } from "./commands/aksKubectlCommands/aksKubectlCommands";
 import aksNavToPortal from "./commands/aksNavToPortal/aksNavToPortal";
 import aksReconcileCluster from "./commands/aksReconcileCluster/aksReconcileCluster";
@@ -50,8 +51,6 @@ import { createAzureAccountTreeItem } from "./tree/azureAccountTreeItem";
 import { AzureResourceNodeContributor } from "./tree/azureResourceNodeContributor";
 import { getPlugins } from "./plugins/getPlugins";
 import { aksCreateClusterFromCopilot } from "./commands/aksCreateCluster/aksCreateClusterFromCopilot";
-import { aksDeployManifest } from "./commands/aksDeployManifest/aksDeployManifest";
-import { aksOpenKubectlPanel } from "./commands/aksOpenKubectlPanel/aksOpenKubectlPanel";
 
 export async function activate(context: vscode.ExtensionContext) {
     const cloudExplorer = await k8s.extension.cloudExplorer.v1;
@@ -115,9 +114,8 @@ export async function activate(context: vscode.ExtensionContext) {
         registerCommandWithTelemetry("aks.aksKaito", aksKaito);
         registerCommandWithTelemetry("aks.aksKaitoGenerateYaml", aksKaitoGenerateYaml);
         registerCommandWithTelemetry("aks.aksKaitoCreateCRD", aksKaitoCreateCRD);
+        registerCommandWithTelemetry("aks.aksKaitoManage", aksKaitoManage);
         registerCommandWithTelemetry("aks.aksCreateClusterFromCopilot", aksCreateClusterFromCopilot);
-        registerCommandWithTelemetry("aks.aksDeployManifest", aksDeployManifest);
-        registerCommandWithTelemetry("aks.aksOpenKubectlPanel", aksOpenKubectlPanel);
         registerCommandWithTelemetry("aks.getAzureKubernetesServicePlugins", getPlugins);
 
         await registerAzureServiceNodes(context);

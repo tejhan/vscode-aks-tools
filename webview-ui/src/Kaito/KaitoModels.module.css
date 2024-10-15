@@ -127,7 +127,7 @@ body {
     font-weight: 700;
 }
 .progressDiv {
-    margin-bottom: 0rem;
+    margin-bottom: 0.7rem;
     margin-top: 0.5rem;
 }
 .progress {
@@ -185,6 +185,9 @@ body {
         --vscode-selection-background,
         var(--vscode-list-activeSelectionBackground, var(--vscode-button-background, #0078d4))
     );
+}
+.createCRDButton {
+    background-color: rgba(128, 128, 128, 0.1);
 }
 
 button:disabled {
