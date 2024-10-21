@@ -11,27 +11,15 @@ import { failed } from "../utils/errorable";
 import { getExtension, longRunning } from "../utils/host";
 
 export default async function aksKaitoCreateCRD(_context: IActionContext, target: unknown): Promise<void> {
-    const cloudExplorer = await k8s.extension.cloudExplorer.v1;
-    const clusterExplorer = await k8s.extension.clusterExplorer.v1;
-    const kubectl = await k8s.extension.kubectl.v1;
-
     const sessionProvider = await getReadySessionProvider();
     if (failed(sessionProvider)) {
         vscode.window.showErrorMessage(sessionProvider.error);
         return;
     }
 
-    const clusterNode = getAksClusterTreeNode(target, cloudExplorer);
-    if (failed(clusterNode)) {
-        vscode.window.showErrorMessage(clusterNode.error);
-        return;
-    }
-
-    const extension = getExtension();
-    if (failed(extension)) {
-        vscode.window.showErrorMessage(extension.error);
-        return;
-    }
+    const cloudExplorer = await k8s.extension.cloudExplorer.v1;
+    const clusterExplorer = await k8s.extension.clusterExplorer.v1;
+    const kubectl = await k8s.extension.kubectl.v1;
 
     if (!kubectl.available) {
         vscode.window.showWarningMessage(`Kubectl is unavailable.`);
@@ -45,6 +33,18 @@ export default async function aksKaitoCreateCRD(_context: IActionContext, target
 
     if (!clusterExplorer.available) {
         vscode.window.showWarningMessage(`Cluster explorer is unavailable.`);
+        return;
+    }
+
+    const clusterNode = getAksClusterTreeNode(target, cloudExplorer);
+    if (failed(clusterNode)) {
+        vscode.window.showErrorMessage(clusterNode.error);
+        return;
+    }
+
+    const extension = getExtension();
+    if (failed(extension)) {
+        vscode.window.showErrorMessage(extension.error);
         return;
     }
 
@@ -62,7 +62,7 @@ export default async function aksKaitoCreateCRD(_context: IActionContext, target
     }
 
     if (filterKaitoPodNames.result.length === 0) {
-        vscode.window.showInformationMessage(
+        vscode.window.showWarningMessage(
             `Please install Kaito for cluster ${clusterName}. \n \n Kaito Workspace generation is only enabled when kaito is installed. Skipping generation.`,
         );
         return;

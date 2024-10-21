@@ -62,7 +62,9 @@ export default async function aksKaitoManage(_context: IActionContext, target: u
     }
 
     if (filterKaitoPodNames.result.length === 0) {
-        vscode.window.showInformationMessage(`Please install Kaito for cluster ${clusterName}.`);
+        vscode.window.showWarningMessage(
+            `Please install Kaito for cluster ${clusterName}. \n \n Kaito Workspace generation is only enabled when kaito is installed. Skipping generation.`,
+        );
         return;
     }
     const clusterInfo = await getKubernetesClusterInfo(sessionProvider.result, target, cloudExplorer, clusterExplorer);

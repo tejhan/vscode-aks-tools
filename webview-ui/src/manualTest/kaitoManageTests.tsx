@@ -35,9 +35,14 @@ export function getKaitoManageScenarios() {
             },
         ],
     };
+
     function getMessageHandler(webview: MessageSink<ToWebViewMsgDef>): MessageHandler<ToVsCodeMsgDef> {
         void webview;
-        return {};
+        return {
+            monitorUpdateRequest: ({ models }) => {
+                console.log("monitorUpdateRequest", models);
+            },
+        };
     }
 
     return [

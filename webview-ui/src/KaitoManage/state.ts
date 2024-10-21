@@ -9,15 +9,18 @@ export type MonitorState = {
     models: ModelState[];
 };
 
-export const vscode = getWebviewMessageContext<"kaitoManage">({});
+export const vscode = getWebviewMessageContext<"kaitoManage">({
+    monitorUpdateRequest: null,
+});
 
 export const stateUpdater: WebviewStateUpdater<"kaitoManage", EventDef, MonitorState> = {
     createState: (initialState) => ({
         ...initialState,
     }),
     vscodeMessageHandler: {
-        monitorUpdate: (state) => ({
+        monitorUpdate: (state, args) => ({
             ...state,
+            models: args.models,
         }),
     },
     eventHandler: {},

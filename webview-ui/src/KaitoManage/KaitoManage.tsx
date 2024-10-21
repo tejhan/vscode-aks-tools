@@ -41,10 +41,17 @@ export function KaitoManage(initialState: InitialState) {
         },
     ];
     void models;
+    const startChecking = async () => {
+        vscode.postMonitorUpdateRequest({ models: state.models });
+    };
+
     return (
         <>
             <h2 className={styles.mainTitle}>Manage Kaito Deployments</h2>
             <VSCodeDivider />
+            <button onClick={startChecking}>Start</button>
+            <button>Stop</button>
+
             <p>Review models that you have generated custom resource documents and deployment status.</p>
 
             <div className={styles.gridContainer}>

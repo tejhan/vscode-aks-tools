@@ -48,11 +48,11 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
             clusterName: this.clusterName,
             modelName: "",
             workspaceExists: false,
-            resourceReady: false,
-            inferenceReady: false,
-            workspaceReady: false,
+            resourceReady: null,
+            inferenceReady: null,
+            workspaceReady: null,
             age: 0,
-        };
+        } as InitialState;
     }
     cancel() {
         this.cancelToken = true;
@@ -225,15 +225,7 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
         }
     }
     private async handleResetStateRequest(webview: MessageSink<ToWebViewMsgDef>) {
-        webview.postDeploymentProgressUpdate({
-            clusterName: this.clusterName,
-            modelName: "",
-            workspaceExists: false,
-            resourceReady: null,
-            inferenceReady: null,
-            workspaceReady: null,
-            age: 0,
-        });
+        webview.postDeploymentProgressUpdate(this.getInitialState());
     }
     convertAgeToMinutes(creationTimestamp: string): number {
         const createdTime = new Date(creationTimestamp);
@@ -243,7 +235,7 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
         return differenceInMinutes;
     }
     statusToBoolean(status: string): boolean {
-        if (status === "True") {
+        if (status.toLowerCase() === "true") {
             return true;
         }
         return false;
@@ -255,31 +247,24 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
             kubectlresult = await invokeKubectlCommand(this.kubectl, this.kubeConfigFilePath, command);
             if (failed(kubectlresult)) {
                 vscode.window.showErrorMessage(kubectlresult.error);
-                return {
-                    clusterName: this.clusterName,
-                    modelName: "",
-                    workspaceExists: false,
-                    resourceReady: null,
-                    inferenceReady: null,
-                    workspaceReady: null,
-                    age: 0,
-                } as InitialState;
+                return this.getInitialState();
             }
         }
         const data = JSON.parse(kubectlresult.result.stdout);
+        // const items = data.items || [];
         const conditions: Array<{ type: string; status: string }> = data.status?.conditions || [];
         let resourceReady = null;
         let inferenceReady = null;
         let workspaceReady = null;
         conditions.forEach(({ type, status }) => {
-            switch (type) {
-                case "ResourceReady":
+            switch (type.toLowerCase()) {
+                case "resourceready":
                     resourceReady = this.statusToBoolean(status);
                     break;
-                case "WorkspaceReady":
+                case "workspaceready":
                     workspaceReady = this.statusToBoolean(status);
                     break;
-                case "InferenceReady":
+                case "inferenceready":
                     inferenceReady = this.statusToBoolean(status);
                     break;
             }
@@ -304,15 +289,7 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
                 vscode.window.showErrorMessage(
                     `There was an error connecting to the workspace. ${kubectlresult.error}`,
                 );
-                webview.postDeploymentProgressUpdate({
-                    clusterName: this.clusterName,
-                    modelName: "",
-                    workspaceExists: false,
-                    resourceReady: null,
-                    inferenceReady: null,
-                    workspaceReady: null,
-                    age: 0,
-                });
+                webview.postDeploymentProgressUpdate(this.getInitialState());
                 this.cancelToken = true;
                 return;
             }
@@ -323,13 +300,17 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
         let inferenceReady = null;
         let workspaceReady = null;
 
-        conditions.forEach((condition) => {
-            if (condition.type === "ResourceReady") {
-                resourceReady = this.statusToBoolean(condition.status);
-            } else if (condition.type === "WorkspaceReady") {
-                workspaceReady = this.statusToBoolean(condition.status);
-            } else if (condition.type === "InferenceReady") {
-                inferenceReady = this.statusToBoolean(condition.status);
+        conditions.forEach(({ type, status }) => {
+            switch (type.toLowerCase()) {
+                case "resourceready":
+                    resourceReady = this.statusToBoolean(status);
+                    break;
+                case "workspaceready":
+                    workspaceReady = this.statusToBoolean(status);
+                    break;
+                case "inferenceready":
+                    inferenceReady = this.statusToBoolean(status);
+                    break;
             }
         });
 

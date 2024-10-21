@@ -2,13 +2,13 @@ import { useState } from "react";
 import styles from "./KaitoModels.module.css";
 import kaitoSupporterModel from "../../../resources/kaitollmconfig/kaitollmconfig.json";
 import { VSCodeDivider, VSCodeLink, VSCodeProgressRing } from "@vscode/webview-ui-toolkit/react";
-import { stateUpdater2, vscode2 } from "./state";
+import { stateUpdater, vscode } from "./state";
 import { useStateManagement } from "../utilities/state";
 import { ArrowIcon } from "../icons/ArrowIcon";
 import { InitialState } from "../../../src/webview-contract/webviewDefinitions/kaitoModels";
 
 export function KaitoModels(initialState: InitialState) {
-    const { state } = useStateManagement(stateUpdater2, initialState, vscode2);
+    const { state } = useStateManagement(stateUpdater, initialState, vscode);
 
     function capitalizeFirstLetter(text: string) {
         return text.charAt(0).toUpperCase() + text.slice(1);
@@ -44,7 +44,7 @@ export function KaitoModels(initialState: InitialState) {
     const handleModelClick = async (model: string) => {
         if (selectedModel !== null) {
             if (model !== selectedModel) {
-                vscode2.postCancelRequest({});
+                vscode.postCancelRequest({});
             }
         }
         if (selectedModel !== model) {
@@ -129,19 +129,19 @@ inference:
 
     function generateCRD(model: string) {
         const yaml = generateYAML(model)[0];
-        vscode2.postGenerateCRDRequest({ model: yaml });
+        vscode.postGenerateCRDRequest({ model: yaml });
         return;
     }
 
     function onClickDeployKaito(model: string) {
         const [yaml, gpu] = generateYAML(model);
         if (!(gpu === undefined)) {
-            vscode2.postDeployKaitoRequest({ model: model, yaml: yaml, gpu: gpu });
+            vscode.postDeployKaitoRequest({ model: model, yaml: yaml, gpu: gpu });
         }
     }
 
     function resetState() {
-        vscode2.postResetStateRequest({});
+        vscode.postResetStateRequest({});
     }
 
     return (
@@ -170,7 +170,7 @@ inference:
                         <button
                             className={styles.closeButton}
                             onClick={() => {
-                                vscode2.postCancelRequest({});
+                                vscode.postCancelRequest({});
                                 setSelectedModel(null);
                             }}
                         >

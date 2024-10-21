@@ -14,7 +14,9 @@ export type ModelState = {
     age: number;
 };
 
-export type ToVsCodeMsgDef = {};
+export type ToVsCodeMsgDef = {
+    monitorUpdateRequest: { models: ModelState[] };
+};
 
 export type ToWebViewMsgDef = {
     monitorUpdate: {
