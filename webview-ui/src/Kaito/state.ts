@@ -11,16 +11,6 @@ export type KaitoState = InitialState & {
     models: ModelDetails[];
 };
 
-export type DeploymentState = {
-    clusterName: string;
-    modelName: string;
-    workspaceExists: boolean;
-    resourceReady: boolean | null;
-    inferenceReady: boolean | null;
-    workspaceReady: boolean | null;
-    age: number;
-};
-
 export const stateUpdater: WebviewStateUpdater<"kaito", EventDef, KaitoState> = {
     createState: (initialState) => ({
         ...initialState,
