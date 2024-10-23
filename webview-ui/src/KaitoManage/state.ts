@@ -11,6 +11,7 @@ export type MonitorState = {
 
 export const vscode = getWebviewMessageContext<"kaitoManage">({
     monitorUpdateRequest: null,
+    deleteWorkspaceRequest: null,
 });
 
 export const stateUpdater: WebviewStateUpdater<"kaitoManage", EventDef, MonitorState> = {

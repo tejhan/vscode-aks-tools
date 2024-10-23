@@ -7,6 +7,7 @@ import { InitialState } from "../webview-contract/webviewDefinitions/kaitoManage
 import { TelemetryDefinition } from "../webview-contract/webviewTypes";
 import { invokeKubectlCommand } from "../commands/utils/kubectl";
 import { failed } from "../commands/utils/errorable";
+import { longRunning } from "../commands/utils/host";
 
 export class KaitoManagePanel extends BasePanel<"kaitoManage"> {
     constructor(extensionUri: vscode.Uri) {
@@ -32,6 +33,8 @@ export class KaitoManagePanelDataProvider implements PanelDataProvider<"kaitoMan
         this.kubectl = kubectl;
         this.kubeConfigFilePath = kubeConfigFilePath;
     }
+    private checkingWorkspaces: boolean = false;
+
     getTitle(): string {
         return `Manage Kaito Models`;
     }
@@ -45,7 +48,7 @@ export class KaitoManagePanelDataProvider implements PanelDataProvider<"kaitoMan
                     resourceReady: null,
                     inferenceReady: null,
                     workspaceReady: null,
-                    age: 0,
+                    age: 10,
                 },
                 {
                     name: "example-model-2",
@@ -53,7 +56,7 @@ export class KaitoManagePanelDataProvider implements PanelDataProvider<"kaitoMan
                     resourceReady: true,
                     inferenceReady: true,
                     workspaceReady: true,
-                    age: 0,
+                    age: 30,
                 },
                 {
                     name: "example-model-3",
@@ -61,7 +64,7 @@ export class KaitoManagePanelDataProvider implements PanelDataProvider<"kaitoMan
                     resourceReady: false,
                     inferenceReady: false,
                     workspaceReady: false,
-                    age: 0,
+                    age: 300,
                 },
             ],
         };
@@ -69,6 +72,7 @@ export class KaitoManagePanelDataProvider implements PanelDataProvider<"kaitoMan
     getTelemetryDefinition(): TelemetryDefinition<"kaitoManage"> {
         return {
             monitorUpdateRequest: false,
+            deleteWorkspaceRequest: false,
         };
     }
     getMessageHandler(webview: MessageSink<ToWebViewMsgDef>): MessageHandler<ToVsCodeMsgDef> {
@@ -76,6 +80,9 @@ export class KaitoManagePanelDataProvider implements PanelDataProvider<"kaitoMan
         return {
             monitorUpdateRequest: (params) => {
                 this.handleMonitorUpdateRequest(params.models, webview);
+            },
+            deleteWorkspaceRequest: (params) => {
+                this.handleDeleteWorkspaceRequest(params.model, webview);
             },
         };
     }
@@ -92,110 +99,72 @@ export class KaitoManagePanelDataProvider implements PanelDataProvider<"kaitoMan
         const differenceInMinutes = Math.floor(differenceInMilliseconds / 1000 / 60);
         return differenceInMinutes;
     }
+    private async handleDeleteWorkspaceRequest(model: string, webview: MessageSink<ToWebViewMsgDef>) {
+        await longRunning(`Deleting workspace workspace-${model}`, async () => {
+            const command = `delete workspace workspace-${model}`;
+            const kubectlresult = await invokeKubectlCommand(this.kubectl, this.kubeConfigFilePath, command);
+            if (failed(kubectlresult)) {
+                vscode.window.showErrorMessage(`There was an error deleting the workspace. ${kubectlresult.error}`);
+                return;
+            }
+        });
+        vscode.window.showInformationMessage(`Workspace workspace-${model} deleted successfully`);
+        await this.updateModels(webview);
+        // this.checkingWorkspaces = false;
+    }
+
+    private async updateModels(webview: MessageSink<ToWebViewMsgDef>) {
+        const command = `get workspace -o json`;
+        const kubectlresult = await invokeKubectlCommand(this.kubectl, this.kubeConfigFilePath, command);
+        if (failed(kubectlresult)) {
+            webview.postMonitorUpdate({
+                clusterName: this.clusterName,
+                models: [],
+            });
+            return;
+        }
+        const models = [];
+        const data = JSON.parse(kubectlresult.result.stdout);
+        for (const item of data.items) {
+            const conditions: Array<{ type: string; status: string }> = item.status?.conditions || [];
+            let resourceReady = null;
+            let inferenceReady = null;
+            let workspaceReady = null;
+            conditions.forEach(({ type, status }) => {
+                switch (type.toLowerCase()) {
+                    case "resourceready":
+                        resourceReady = this.statusToBoolean(status);
+                        break;
+                    case "workspaceready":
+                        workspaceReady = this.statusToBoolean(status);
+                        break;
+                    case "inferenceready":
+                        inferenceReady = this.statusToBoolean(status);
+                        break;
+                }
+            });
+            models.push({
+                name: item.inference.preset.name,
+                instance: item.resource.instanceType,
+                resourceReady: resourceReady,
+                inferenceReady: inferenceReady,
+                workspaceReady: workspaceReady,
+                age: this.convertAgeToMinutes(item.metadata?.creationTimestamp),
+            });
+        }
+        webview.postMonitorUpdate({
+            clusterName: this.clusterName,
+            models: models,
+        });
+    }
+
     // private canceled: boolean = false;
     private async handleMonitorUpdateRequest(models: ModelState[], webview: MessageSink<ToWebViewMsgDef>) {
         void models;
-        while (true) {
-            const command = `get workspace -o json`;
-            const kubectlresult = await invokeKubectlCommand(this.kubectl, this.kubeConfigFilePath, command);
-            if (failed(kubectlresult)) {
-                webview.postMonitorUpdate({
-                    clusterName: this.clusterName,
-                    models: [],
-                });
-                return;
-            }
-            const models = [];
-            const data = JSON.parse(kubectlresult.result.stdout);
-            for (const item of data.items) {
-                const conditions: Array<{ type: string; status: string }> = item.status?.conditions || [];
-                let resourceReady = null;
-                let inferenceReady = null;
-                let workspaceReady = null;
-                conditions.forEach(({ type, status }) => {
-                    switch (type.toLowerCase()) {
-                        case "resourceready":
-                            resourceReady = this.statusToBoolean(status);
-                            break;
-                        case "workspaceready":
-                            workspaceReady = this.statusToBoolean(status);
-                            break;
-                        case "inferenceready":
-                            inferenceReady = this.statusToBoolean(status);
-                            break;
-                    }
-                });
-                models.push({
-                    name: item.inference.preset.name,
-                    instance: item.resource.instanceType,
-                    resourceReady: resourceReady,
-                    inferenceReady: inferenceReady,
-                    workspaceReady: workspaceReady,
-                    age: this.convertAgeToMinutes(item.metadata?.creationTimestamp),
-                });
-            }
-            webview.postMonitorUpdate({
-                clusterName: this.clusterName,
-                models: models,
-            });
+        this.checkingWorkspaces = true;
+        while (this.checkingWorkspaces) {
+            await this.updateModels(webview);
+            await new Promise((resolve) => setTimeout(resolve, 5000));
         }
-        // while (true) {
-        //     for (const model of models) {
-        //         model.name = new Date().toLocaleTimeString();
-        //     }
-        //     webview.postMonitorUpdate({
-        //         clusterName: this.clusterName,
-        //         models,
-        //     });
-        //     await new Promise((resolve) => setTimeout(resolve, 5000));
-        // }
-
-        // const command = `get workspace workspace-${model} -o json`;
-        // let kubectlresult = await invokeKubectlCommand(this.kubectl, this.kubeConfigFilePath, command);
-        // if (failed(kubectlresult)) {
-        //     kubectlresult = await invokeKubectlCommand(this.kubectl, this.kubeConfigFilePath, command);
-        //     if (failed(kubectlresult)) {
-        //         vscode.window.showErrorMessage(
-        //             `There was an error connecting to the workspace. ${kubectlresult.error}`,
-        //         );
-        //         webview.postDeploymentProgressUpdate({
-        //             clusterName: this.clusterName,
-        //             modelName: "",
-        //             workspaceExists: false,
-        //             resourceReady: null,
-        //             inferenceReady: null,
-        //             workspaceReady: null,
-        //             age: 0,
-        //         });
-        //         this.cancelToken = true;
-        //         return;
-        //     }
-        // }
-        // const data = JSON.parse(kubectlresult.result.stdout);
-        // const conditions: Array<{ type: string; status: string }> = data.status?.conditions || [];
-        // let resourceReady = null;
-        // let inferenceReady = null;
-        // let workspaceReady = null;
-
-        // conditions.forEach((condition) => {
-        //     if (condition.type === "ResourceReady") {
-        //         resourceReady = this.statusToBoolean(condition.status);
-        //     } else if (condition.type === "WorkspaceReady") {
-        //         workspaceReady = this.statusToBoolean(condition.status);
-        //     } else if (condition.type === "InferenceReady") {
-        //         inferenceReady = this.statusToBoolean(condition.status);
-        //     }
-        // });
-
-        // webview.postDeploymentProgressUpdate({
-        //     clusterName: this.clusterName,
-        //     modelName: model,
-        //     workspaceExists: true,
-        //     resourceReady: resourceReady,
-        //     inferenceReady: inferenceReady,
-        //     workspaceReady: workspaceReady,
-        //     age: this.convertAgeToMinutes(data.metadata?.creationTimestamp),
-        // });
-        // return;
     }
 }

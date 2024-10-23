@@ -223,7 +223,7 @@ inference:
                                                 state.workspaceExists &&
                                                 !state.workspaceReady &&
                                                 (() => {
-                                                    if (state.age > 360) {
+                                                    if (state.age > 200 && !state.resourceReady) {
                                                         return (
                                                             <>
                                                                 <div className={styles.failure}>

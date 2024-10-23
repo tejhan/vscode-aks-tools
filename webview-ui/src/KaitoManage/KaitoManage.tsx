@@ -6,51 +6,23 @@ import { VSCodeDivider, VSCodeProgressRing } from "@vscode/webview-ui-toolkit/re
 
 export function KaitoManage(initialState: InitialState) {
     const { state } = useStateManagement(stateUpdater, initialState, vscode);
-    const models = [
-        {
-            name: "Model 1",
-            instance: "Standard_NC12s_v3",
-            resourceReady: true,
-            inferenceReady: true,
-            workspaceReady: true,
-            age: 0,
-        },
-        {
-            name: "Model 2",
-            instance: "Standard_NC12s_v3",
-            resourceReady: true,
-            inferenceReady: true,
-            workspaceReady: true,
-            age: 0,
-        },
-        {
-            name: "Model 3",
-            instance: "Standard_NC12s_v3",
-            resourceReady: true,
-            inferenceReady: true,
-            workspaceReady: true,
-            age: 0,
-        },
-        {
-            name: "Model 4",
-            instance: "Standard_NC12s_v3",
-            resourceReady: true,
-            inferenceReady: true,
-            workspaceReady: true,
-            age: 0,
-        },
-    ];
-    void models;
-    const startChecking = async () => {
+
+    async function startChecking() {
         vscode.postMonitorUpdateRequest({ models: state.models });
-    };
+    }
+    // async function stopChecking() {
+    //     vscode.postStopCheckingRequest({ models: state.models });
+    // }
+    async function deleteWorkspace(model: string) {
+        vscode.postDeleteWorkspaceRequest({ model: model });
+    }
 
     return (
         <>
             <h2 className={styles.mainTitle}>Manage Kaito Deployments</h2>
             <VSCodeDivider />
             <button onClick={startChecking}>Start</button>
-            <button>Stop</button>
+            {/* <button onClick={stopChecking}>Stop</button> */}
 
             <p>Review models that you have generated custom resource documents and deployment status.</p>
 
@@ -65,11 +37,16 @@ export function KaitoManage(initialState: InitialState) {
                         <div className={styles.progressDiv}>
                             {!(model.workspaceReady ?? false) &&
                                 (() => {
-                                    if (model.age < 200) {
+                                    if (model.age < 200 || model.resourceReady) {
                                         return (
                                             <>
                                                 <div className={styles.buttonDiv}>
-                                                    <button className={styles.button}>Cancel</button>
+                                                    <button
+                                                        onClick={() => deleteWorkspace(model.name)}
+                                                        className={styles.button}
+                                                    >
+                                                        Cancel
+                                                    </button>
                                                 </div>
                                                 <VSCodeProgressRing className={styles.progress} />
                                                 <span className={styles.bold}>Deployment in progress</span>
@@ -82,7 +59,12 @@ export function KaitoManage(initialState: InitialState) {
                                                 <button className={`${styles.button} ${styles.testButton}`}>
                                                     Re-deploy default CRD
                                                 </button>
-                                                <button className={styles.button}>Delete Workspace</button>
+                                                <button
+                                                    onClick={() => deleteWorkspace(model.name)}
+                                                    className={styles.button}
+                                                >
+                                                    Delete Workspace
+                                                </button>
                                             </div>
                                             <div className={styles.sucessContainer}>
                                                 <div className={styles.successIconContainer}>

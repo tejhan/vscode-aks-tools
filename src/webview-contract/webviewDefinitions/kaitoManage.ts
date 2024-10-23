@@ -16,6 +16,7 @@ export type ModelState = {
 
 export type ToVsCodeMsgDef = {
     monitorUpdateRequest: { models: ModelState[] };
+    deleteWorkspaceRequest: { model: string };
 };
 
 export type ToWebViewMsgDef = {

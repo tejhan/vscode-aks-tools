@@ -15,7 +15,7 @@ export function getKaitoManageScenarios() {
                 resourceReady: null,
                 inferenceReady: null,
                 workspaceReady: null,
-                age: 0,
+                age: 10,
             },
             {
                 name: "example-model-2",
@@ -23,7 +23,7 @@ export function getKaitoManageScenarios() {
                 resourceReady: true,
                 inferenceReady: true,
                 workspaceReady: true,
-                age: 0,
+                age: 30,
             },
             {
                 name: "example-model-3",
@@ -41,6 +41,9 @@ export function getKaitoManageScenarios() {
         return {
             monitorUpdateRequest: ({ models }) => {
                 console.log("monitorUpdateRequest", models);
+            },
+            deleteWorkspaceRequest: ({ model }) => {
+                console.log("deleteWorkspaceRequest", model);
             },
         };
     }
