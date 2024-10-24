@@ -44,7 +44,7 @@ export function KaitoModels(initialState: InitialState) {
     const handleModelClick = async (model: string) => {
         if (selectedModel !== null) {
             if (model !== selectedModel) {
-                vscode.postCancelRequest({});
+                vscode.postCancelRequest({ model: selectedModel });
             }
         }
         if (selectedModel !== model) {
@@ -170,7 +170,8 @@ inference:
                         <button
                             className={styles.closeButton}
                             onClick={() => {
-                                vscode.postCancelRequest({});
+                                vscode.postCancelRequest({ model: selectedModel });
+                                vscode.postResetStateRequest({});
                                 setSelectedModel(null);
                             }}
                         >
