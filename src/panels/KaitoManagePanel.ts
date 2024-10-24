@@ -8,6 +8,7 @@ import { TelemetryDefinition } from "../webview-contract/webviewTypes";
 import { invokeKubectlCommand } from "../commands/utils/kubectl";
 import { failed } from "../commands/utils/errorable";
 import { longRunning } from "../commands/utils/host";
+import { getConditions, convertAgeToMinutes } from "./utilities/KaitoHelpers";
 
 export class KaitoManagePanel extends BasePanel<"kaitoManage"> {
     constructor(extensionUri: vscode.Uri) {
@@ -86,19 +87,6 @@ export class KaitoManagePanelDataProvider implements PanelDataProvider<"kaitoMan
             },
         };
     }
-    statusToBoolean(status: string): boolean {
-        if (status.toLowerCase() === "true") {
-            return true;
-        }
-        return false;
-    }
-    convertAgeToMinutes(creationTimestamp: string): number {
-        const createdTime = new Date(creationTimestamp);
-        const currentTime = new Date();
-        const differenceInMilliseconds = currentTime.getTime() - createdTime.getTime();
-        const differenceInMinutes = Math.floor(differenceInMilliseconds / 1000 / 60);
-        return differenceInMinutes;
-    }
     private async handleDeleteWorkspaceRequest(model: string, webview: MessageSink<ToWebViewMsgDef>) {
         await longRunning(`Deleting workspace workspace-${model}`, async () => {
             const command = `delete workspace workspace-${model}`;
@@ -110,7 +98,6 @@ export class KaitoManagePanelDataProvider implements PanelDataProvider<"kaitoMan
         });
         vscode.window.showInformationMessage(`Workspace workspace-${model} deleted successfully`);
         await this.updateModels(webview);
-        // this.checkingWorkspaces = false;
     }
 
     private async updateModels(webview: MessageSink<ToWebViewMsgDef>) {
@@ -127,29 +114,14 @@ export class KaitoManagePanelDataProvider implements PanelDataProvider<"kaitoMan
         const data = JSON.parse(kubectlresult.result.stdout);
         for (const item of data.items) {
             const conditions: Array<{ type: string; status: string }> = item.status?.conditions || [];
-            let resourceReady = null;
-            let inferenceReady = null;
-            let workspaceReady = null;
-            conditions.forEach(({ type, status }) => {
-                switch (type.toLowerCase()) {
-                    case "resourceready":
-                        resourceReady = this.statusToBoolean(status);
-                        break;
-                    case "workspaceready":
-                        workspaceReady = this.statusToBoolean(status);
-                        break;
-                    case "inferenceready":
-                        inferenceReady = this.statusToBoolean(status);
-                        break;
-                }
-            });
+            const { resourceReady, inferenceReady, workspaceReady } = getConditions(conditions);
             models.push({
                 name: item.inference.preset.name,
                 instance: item.resource.instanceType,
                 resourceReady: resourceReady,
                 inferenceReady: inferenceReady,
                 workspaceReady: workspaceReady,
-                age: this.convertAgeToMinutes(item.metadata?.creationTimestamp),
+                age: convertAgeToMinutes(item.metadata?.creationTimestamp),
             });
         }
         webview.postMonitorUpdate({
@@ -158,7 +130,6 @@ export class KaitoManagePanelDataProvider implements PanelDataProvider<"kaitoMan
         });
     }
 
-    // private canceled: boolean = false;
     private async handleMonitorUpdateRequest(models: ModelState[], webview: MessageSink<ToWebViewMsgDef>) {
         void models;
         this.checkingWorkspaces = true;

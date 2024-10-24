@@ -14,6 +14,7 @@ import { TelemetryDefinition } from "../webview-contract/webviewTypes";
 import { BasePanel, PanelDataProvider } from "./BasePanel";
 import { PagedAsyncIterableIterator, PageSettings } from "@azure/core-paging";
 import { Usage } from "@azure/arm-compute";
+import { getConditions, convertAgeToMinutes } from "./utilities/KaitoHelpers";
 
 enum GpuFamilies {
     NCSv3Family = "s_v3",
@@ -46,7 +47,6 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
         this.kubeConfigFilePath = kubeConfigFilePath;
     }
     // When true, will break the loop that is watching the workspace progress
-    // private cancelToken: boolean = false;
     private cancelTokens: Map<string, boolean> = new Map();
     cancel(model: string) {
         this.cancelTokens.set(model, true);
@@ -68,9 +68,6 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
             age: 0,
         } as InitialState;
     }
-    // cancel() {
-    //     this.cancelToken = true;
-    // }
     getTelemetryDefinition(): TelemetryDefinition<"kaitoModels"> {
         return {
             generateCRDRequest: true,
@@ -141,27 +138,6 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
         }
     }
 
-    // Helper function for workspace readiness
-    getConditions(conditions: Array<{ type: string; status: string }>) {
-        let resourceReady = null;
-        let inferenceReady = null;
-        let workspaceReady = null;
-        conditions.forEach(({ type, status }) => {
-            switch (type.toLowerCase()) {
-                case "resourceready":
-                    resourceReady = this.statusToBoolean(status);
-                    break;
-                case "workspacesucceeded":
-                    workspaceReady = this.statusToBoolean(status);
-                    break;
-                case "inferenceready":
-                    inferenceReady = this.statusToBoolean(status);
-                    break;
-            }
-        });
-        return { resourceReady, inferenceReady, workspaceReady };
-    }
-
     async promptForQuotaIncrease() {
         const selection = await vscode.window.showErrorMessage(
             `Your current Azure subscription doesn't have enough quota to deploy this model. Proceed to request a quota increase.`,
@@ -198,12 +174,11 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
         gpu: string,
         webview: MessageSink<ToWebViewMsgDef>,
     ) {
+        // Resetting cancelToken
         this.cancelTokens.set(model, false);
         this.handleResetStateRequest(webview);
 
-        // Resetting cancelToken
-        // this.cancelToken = false;
-        // This prevents the user from redeploying while quota is being checked
+        // This conditinal prevents the user from redeploying while quota is being checked
         if (this.checkingGPU) {
             return;
         }
@@ -281,19 +256,7 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
     private async handleResetStateRequest(webview: MessageSink<ToWebViewMsgDef>) {
         webview.postDeploymentProgressUpdate(this.getInitialState());
     }
-    convertAgeToMinutes(creationTimestamp: string): number {
-        const createdTime = new Date(creationTimestamp);
-        const currentTime = new Date();
-        const differenceInMilliseconds = currentTime.getTime() - createdTime.getTime();
-        const differenceInMinutes = Math.floor(differenceInMilliseconds / 1000 / 60);
-        return differenceInMinutes;
-    }
-    statusToBoolean(status: string): boolean {
-        if (status.toLowerCase() === "true") {
-            return true;
-        }
-        return false;
-    }
+
     private async getProgress(model: string): Promise<InitialState> {
         const command = `get workspace workspace-${model} -o json`;
         let kubectlresult = await invokeKubectlCommand(this.kubectl, this.kubeConfigFilePath, command);
@@ -305,9 +268,8 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
             }
         }
         const data = JSON.parse(kubectlresult.result.stdout);
-        // const items = data.items || [];
         const conditions: Array<{ type: string; status: string }> = data.status?.conditions || [];
-        const { resourceReady, inferenceReady, workspaceReady } = this.getConditions(conditions);
+        const { resourceReady, inferenceReady, workspaceReady } = getConditions(conditions);
         return {
             clusterName: this.clusterName,
             modelName: model,
@@ -315,7 +277,7 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
             resourceReady: resourceReady,
             inferenceReady: inferenceReady,
             workspaceReady: workspaceReady,
-            age: this.convertAgeToMinutes(data.metadata?.creationTimestamp),
+            age: convertAgeToMinutes(data.metadata?.creationTimestamp),
         } as InitialState;
     }
 
@@ -336,7 +298,7 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
         }
         const data = JSON.parse(kubectlresult.result.stdout);
         const conditions: Array<{ type: string; status: string }> = data.status?.conditions || [];
-        const { resourceReady, inferenceReady, workspaceReady } = this.getConditions(conditions);
+        const { resourceReady, inferenceReady, workspaceReady } = getConditions(conditions);
 
         webview.postDeploymentProgressUpdate({
             clusterName: this.clusterName,
@@ -345,7 +307,7 @@ export class KaitoModelsPanelDataProvider implements PanelDataProvider<"kaitoMod
             resourceReady: resourceReady,
             inferenceReady: inferenceReady,
             workspaceReady: workspaceReady,
-            age: this.convertAgeToMinutes(data.metadata?.creationTimestamp),
+            age: convertAgeToMinutes(data.metadata?.creationTimestamp),
         });
         return;
     }
