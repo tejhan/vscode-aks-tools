@@ -1,13 +1,14 @@
+import { spawn } from "child_process";
+import getPort from "get-port";
 import * as vscode from "vscode";
 import * as k8s from "vscode-kubernetes-tools-api";
 import { ReadyAzureSessionProvider } from "../auth/types";
+import { sendPostRequest } from "../commands/utils/axios";
+import { longRunning } from "../commands/utils/host";
 import { MessageHandler, MessageSink } from "../webview-contract/messaging";
 import { InitialState, ToVsCodeMsgDef, ToWebViewMsgDef } from "../webview-contract/webviewDefinitions/kaitoTest";
 import { TelemetryDefinition } from "../webview-contract/webviewTypes";
 import { BasePanel, PanelDataProvider } from "./BasePanel";
-import { exec, ExecException, spawn } from "child_process";
-import { longRunning } from "../commands/utils/host";
-import getPort from "get-port";
 
 export class KaitoTestPanel extends BasePanel<"kaitoTest"> {
     constructor(extensionUri: vscode.Uri) {
@@ -73,22 +74,8 @@ export class KaitoTestPanelDataProvider implements PanelDataProvider<"kaitoTest"
     nullIsFalse(value: boolean | null): boolean {
         return value ?? false;
     }
-    // Tracks if query is currently beign sent. If so, prevents user from sending another query
-    private sendingQuery: boolean = false;
-
-    // Sanitizing the input string
-    private escapeSpecialChars(input: string) {
-        return input
-            .replace(/\\/g, "\\\\") // Escape backslashes
-            .replace(/"/g, '\\"') // Escape double quotes
-            .replace(/'/g, "") // Remove single quotes
-            .replace(/\n/g, "\\n") // Escape newlines
-            .replace(/\r/g, "\\r") // Escape carriage returns
-            .replace(/\t/g, "\\t") // Escape tabs
-            .replace(/\f/g, "\\f") // Escape form feeds
-            .replace(/`/g, "") // Remove backticks
-            .replace(/\0/g, "\\0"); // Escape null characters
-    }
+    // Tracks if query is currently being sent. If so, prevents user from sending another query
+    private isQueryInProgress: boolean = false;
 
     // Sends a request to the inference server to generate a response to the given prompt
     private async handleQueryRequest(
@@ -101,11 +88,12 @@ export class KaitoTestPanelDataProvider implements PanelDataProvider<"kaitoTest"
         webview: MessageSink<ToWebViewMsgDef>,
     ) {
         // prevents user from re-submitting while a query is in progress
-        if (this.sendingQuery) {
+        if (this.isQueryInProgress) {
+            vscode.window.showErrorMessage("Query already in progress. Please wait for the current query to finish.");
             return;
         }
         await longRunning(`Sending query...`, async () => {
-            this.sendingQuery = true;
+            this.isQueryInProgress = true;
             const localPort = await getPort();
             const portForwardProcess = spawn("kubectl", [
                 "port-forward",
@@ -117,30 +105,27 @@ export class KaitoTestPanelDataProvider implements PanelDataProvider<"kaitoTest"
 
             // slight delay to allow for port forwarding to initialize
             await new Promise((resolve) => setTimeout(resolve, 2000));
-            const curlCommand = `curl -X POST http://localhost:${localPort}/chat -H "accept: application/json" -H \
-"Content-Type: application/json" -d '{"prompt":"${this.escapeSpecialChars(prompt)}", \
-"generate_kwargs":{"temperature":${temperature}, "top_p":${topP}, "top_k":${topK}, \
-"repetition_penalty":${repetitionPenalty}, "max_length":${maxLength}}}'`;
-
-            // Send the query to the inference server
-            await new Promise<void>((resolve, reject) => {
-                exec(curlCommand, (error: ExecException | null, stdout: string, stderr: string) => {
-                    if (error) {
-                        vscode.window.showErrorMessage(`Error executing curl command: ${stderr}`);
-                        reject(error);
-                        this.sendingQuery = false;
-                    } else {
-                        webview.postTestUpdate({
-                            clusterName: this.clusterName,
-                            modelName: this.modelName,
-                            output: JSON.parse(stdout).Result,
-                        });
-                        resolve();
-                    }
-                    portForwardProcess.kill();
+            try {
+                const result = await sendPostRequest(
+                    localPort,
+                    prompt,
+                    temperature,
+                    topP,
+                    topK,
+                    repetitionPenalty,
+                    maxLength,
+                );
+                webview.postTestUpdate({
+                    clusterName: this.clusterName,
+                    modelName: this.modelName,
+                    output: JSON.parse(result).Result,
                 });
-            });
+                portForwardProcess.kill();
+                this.isQueryInProgress = false;
+            } catch (error) {
+                vscode.window.showErrorMessage(`Error sending request to workspace via portforward: ${error}`);
+                this.isQueryInProgress = false;
+            }
         });
-        this.sendingQuery = false;
     }
 }
