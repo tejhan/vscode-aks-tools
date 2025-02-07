@@ -32,8 +32,8 @@ export function CreateClusterInput(props: CreateClusterInputProps) {
     const [isNewResourceGroupDialogShown, setIsNewResourceGroupDialogShown] = useState(false);
     const [newResourceGroupName, setNewResourceGroupName] = useState<string | null>(null);
     const [presetSelected, setPresetSelected] = useState<PresetType>(PresetType.Automatic);
-    const [selectedIndex, setSelectedIndex] = useState<number>(0);
     const [location, setLocation] = useState<Validatable<string>>(unset());
+    const [selectedRG, setSelectedRG] = useState<string>("");
 
     const newResourceGroup = newResourceGroupName
         ? {
@@ -51,7 +51,7 @@ export function CreateClusterInput(props: CreateClusterInputProps) {
         setIsNewResourceGroupDialogShown(false);
         setExistingResourceGroup(valid(null));
         setNewResourceGroupName(groupName);
-        setSelectedIndex(1); // this is the index of the new resource group and the first option is "Select"
+        setSelectedRG(groupName);
     }
 
     function handlePresetSelection(presetSelected: PresetType) {
@@ -60,8 +60,7 @@ export function CreateClusterInput(props: CreateClusterInputProps) {
 
     function handleValidationAndIndex(e: ChangeEvent) {
         handleExistingResourceGroupChange(e);
-        const ele = e.currentTarget as HTMLSelectElement;
-        setSelectedIndex(ele.selectedIndex);
+        setSelectedRG((e.currentTarget as HTMLSelectElement).value);
     }
 
     function handleExistingResourceGroupChange(e: ChangeEvent) {
@@ -142,27 +141,25 @@ export function CreateClusterInput(props: CreateClusterInputProps) {
                     <label htmlFor="existing-resource-group-dropdown" className={styles.label}>
                         Resource Group*
                     </label>
-                    <VSCodeDropdown
+                    <select
                         id="existing-resource-group-dropdown"
                         className={styles.midControl}
                         onBlur={handleValidationAndIndex}
                         onChange={handleValidationAndIndex}
-                        selectedIndex={selectedIndex}
                         aria-label="Select a resource group"
+                        value={selectedRG}
                     >
-                        <VSCodeOption selected value="">
-                            Select
-                        </VSCodeOption>
+                        <option value="">Select</option>
                         {allResourceGroups.length > 0 ? (
                             allResourceGroups.map((group) => (
-                                <VSCodeOption key={group.name} value={group.name}>
+                                <option key={group.name} value={group.name}>
                                     {group === newResourceGroup ? "(New)" : ""} {group.name}
-                                </VSCodeOption>
+                                </option>
                             ))
                         ) : (
-                            <VSCodeOption disabled>No resource groups available</VSCodeOption>
+                            <option disabled>No resource groups available</option>
                         )}
-                    </VSCodeDropdown>
+                    </select>
 
                     <VSCodeButton className={styles.sideControl} onClick={() => setIsNewResourceGroupDialogShown(true)}>
                         Create New

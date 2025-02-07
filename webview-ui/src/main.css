@@ -107,10 +107,26 @@ input[type="text"] {
     font-family: inherit;
 }
 
-option:hover {
-    color: var(--vscode-list-focusForeground);
+select {
+    height: calc(var(--input-height) * 1px);
+    color: var(--input-foreground);
+    background-color: var(--input-background);
+    border: 1px solid var(--input-border);
+    padding: 0px 0px 0px 4px;
+    box-sizing: border-box;
+    font-family: inherit;
+    border-radius: 2px;
+    /* -webkit-appearance: menulist-button; */
+    /* appearance: menulist-button; */
+    /* height: 50px; */
+}
+
+select:hover {
     cursor: pointer;
-    background-color: var(--vscode-list-activeSelectionBackground);
+}
+
+option {
+    font-size: var(--vscode-font-size);
 }
 
 option:focus {
