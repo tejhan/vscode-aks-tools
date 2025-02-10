@@ -127,3 +127,16 @@ ul.hierarchyList li * {
 .panelContent .main {
     grid-column: 2 / 3;
 }
+
+.displayCheckbox {
+    display: inline;
+    /* position: relative; */
+}
+
+.displayLabel {
+    display: inline;
+    position: relative;
+    top: -0.3rem;
+    margin-left: 0.1rem;
+    /* line-height: 0; */
+}

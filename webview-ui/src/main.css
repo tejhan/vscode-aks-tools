@@ -95,7 +95,6 @@ hr {
     margin: 4px 0 4px 0;
 }
 
-input,
 input[type="text"] {
     height: calc(var(--input-height) * 1px);
     color: var(--input-foreground);
@@ -105,6 +104,12 @@ input[type="text"] {
     box-sizing: border-box;
     border-radius: 2px;
     font-family: inherit;
+}
+
+input[type="checkbox"] {
+    width: 19px;
+    height: 19px;
+    cursor: pointer;
 }
 
 select {

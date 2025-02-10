@@ -1,4 +1,4 @@
-import { VSCodeButton, VSCodeCheckbox, VSCodeDivider, VSCodeProgressRing } from "@vscode/webview-ui-toolkit/react";
+import { VSCodeButton, VSCodeDivider, VSCodeProgressRing } from "@vscode/webview-ui-toolkit/react";
 import styles from "./InspektorGadget.module.css";
 import { Dialog } from "../components/Dialog";
 import { FormEvent, useEffect, useState, ChangeEvent as InputChangeEvent } from "react";
@@ -227,12 +227,16 @@ export function NewTraceDialog(props: NewTraceDialogProps) {
                     )}
 
                     {extraProperties.threadExclusionAllowed && (
-                        <VSCodeCheckbox
-                            checked={traceConfig.excludeThreads === false}
-                            onChange={handleDisplayThreadsChange}
-                        >
-                            Display threads
-                        </VSCodeCheckbox>
+                        <>
+                            <div>
+                                <input
+                                    className={styles.displayCheckbox}
+                                    type="checkbox"
+                                    onChange={handleDisplayThreadsChange}
+                                />
+                                <label className={styles.displayLabel}>Display Threads</label>
+                            </div>
+                        </>
                     )}
 
                     {extraProperties.requiresTimeout && (

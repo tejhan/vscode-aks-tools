@@ -1,4 +1,4 @@
-import { VSCodeButton, VSCodeCheckbox, VSCodeDivider } from "@vscode/webview-ui-toolkit/react";
+import { VSCodeButton, VSCodeDivider } from "@vscode/webview-ui-toolkit/react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faPlus, faTrashCan, faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import styles from "./InspektorGadget.module.css";
@@ -35,7 +35,8 @@ export function Traces(props: TracesProps) {
     }
 
     function ignoreClick(e: Event | FormEvent<HTMLElement>) {
-        e.preventDefault();
+        void e;
+        // e.preventDefault();
         e.stopPropagation();
     }
 
@@ -140,12 +141,13 @@ export function Traces(props: TracesProps) {
                                 className={getTraceRowClassNames(trace.traceId)}
                             >
                                 <td>
-                                    <VSCodeCheckbox
-                                        checked={checkedTraceIds.includes(trace.traceId)}
+                                    <input
+                                        type="checkbox"
                                         onClick={ignoreClick}
                                         onChange={() => toggleCheckedTraceId(trace.traceId)}
-                                        style={{ margin: "0", paddingRight: "0.5rem" }}
+                                        style={{ margin: "0 0.5rem 0 0" }}
                                     />
+
                                     {getGadgetMetadata(trace.category, trace.resource)?.name}
                                 </td>
                                 <td>{getNamespaceText(trace.filters.namespace)}</td>
